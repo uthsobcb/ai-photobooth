@@ -11,7 +11,7 @@ export function Button({ className, variant = "default", size = "md", ...props }
     const variantStyles =
         variant === "outline"
             ? "border border-gray-300 bg-white text-gray-700 hover:bg-gray-100"
-            : "bg-blue-600 text-white hover:bg-blue-700"
+            : "bg-black text-white hover:bg-gray-700"
     const sizeStyles = size === "sm" ? "px-3 py-1 text-sm" : size === "lg" ? "px-6 py-3 text-lg" : "px-4 py-2 text-base"
 
     return <button className={cn(baseStyles, variantStyles, sizeStyles, className)} {...props} />
