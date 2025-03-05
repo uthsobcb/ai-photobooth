@@ -5,9 +5,8 @@ import Webcam from "react-webcam"
 import { Button } from "./Button"
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "./Tabs"
 import { CameraIcon, Upload, RefreshCw } from "lucide-react"
-import { Input } from "./Input"
-import { Label } from "./Label"
 import { Card, CardContent } from "./Card"
+import { UploadImageCard } from "./UploadImageCard"
 
 interface CameraProps {
     onImageCapture: (imageData: string) => void
@@ -99,19 +98,9 @@ export function Camera({ onImageCapture }: CameraProps) {
                     </TabsContent>
 
                     {/* Upload Tab */}
-                    <TabsContent value="upload" className="mt-5">
-                        <div className="flex flex-col gap-3">
-                            <Label htmlFor="picture" className="text-gray-700 text-sm font-medium">
-                                Upload an Image
-                            </Label>
-                            <Input
-                                id="picture"
-                                type="file"
-                                accept="image/*"
-                                onChange={handleFileUpload}
-                                className="border-gray-300 focus:border-blue-500 focus:ring focus:ring-blue-300 rounded-lg"
-                            />
-                        </div>
+                    <TabsContent value="upload" className="mt-5 flex justify-center items-center">
+
+                        <UploadImageCard onImageUpload={onImageCapture} />
                     </TabsContent>
                 </Tabs>
             </CardContent>
