@@ -1,9 +1,18 @@
 import Image from "next/image"
 import { cn } from "@/lib/utils"
+import { DownloadIcon } from "lucide-react"
 
 interface GalleryProps {
     images: string[]
 }
+const downloadImage = (imageUrl: string) => {
+    const link = document.createElement("a");
+    link.href = imageUrl;
+    link.download = imageUrl.split("/").pop() || "downloaded-image.jpg";
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+};
 
 export function Gallery({ images }: GalleryProps) {
     if (images.length === 0) {
@@ -38,10 +47,13 @@ export function Gallery({ images }: GalleryProps) {
                             className="object-cover transition-transform group-hover:scale-105"
                             sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
                         />
-                        {/* Glass overlay on hover */}
-                        <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-center justify-center">
-                            <p className="text-white text-sm font-medium">Image {index + 1}</p>
-                        </div>
+                        <button
+                            onClick={() => downloadImage(image)}
+                            className="absolute top-2 right-2 bg-blue-500 p-2 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+                        >
+                            <DownloadIcon className="w-4 h-4 text-white" />
+                        </button>
+
                     </div>
                 ))}
             </div>

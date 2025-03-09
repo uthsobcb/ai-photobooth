@@ -5,21 +5,6 @@ import { Menu, X, Home, User } from "lucide-react"
 import Link from "next/link"
 import { SignInButton, SignUpButton, UserButton, SignedIn, SignedOut } from "@clerk/nextjs"
 
-const navLinks = [
-    {
-        name: "Home",
-        href: "/",
-        icon: Home,
-        public: true
-    },
-    {
-        name: "My Albums",
-        href: "/dashboard",
-        icon: User,
-        requiresAuth: true
-    },
-]
-
 export function Navbar() {
     const [isOpen, setIsOpen] = useState(false)
 

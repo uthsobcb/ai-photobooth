@@ -23,17 +23,6 @@ export function Camera({ onImageCapture }: CameraProps) {
         }
     }, [onImageCapture])
 
-    const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
-        const file = event.target.files?.[0]
-        if (file) {
-            const reader = new FileReader()
-            reader.onloadend = () => {
-                const imageData = reader.result as string
-                onImageCapture(imageData)
-            }
-            reader.readAsDataURL(file)
-        }
-    }
 
     const handleCameraError = useCallback(() => {
         setCameraError(true)
