@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { Menu, X, Home, User } from "lucide-react"
+import { Menu, X, Home, User, Search } from "lucide-react"
 import Link from "next/link"
 import { SignInButton, SignUpButton, UserButton, SignedIn, SignedOut } from "@clerk/nextjs"
 
@@ -29,6 +29,10 @@ export function Navbar() {
                             <UserButton afterSignOutUrl="/" />
                         </SignedIn>
                         <SignedOut>
+                            <Link href="/find" className="flex items-center gap-2 text-gray-600 hover:text-black transition">
+                                <Search className="w-5 h-5" />
+                                <span>Find</span>
+                            </Link>
                             <SignInButton mode="modal">
                                 <button className="text-gray-600 hover:text-black transition">
                                     Sign In
