@@ -47,3 +47,4 @@ venv
 venv/
 node_modules/
 album_vectors/
+.next/
