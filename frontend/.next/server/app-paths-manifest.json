@@ -1,0 +1,6 @@
+{
+  "/albums/[id]/page": "app/albums/[id]/page.js",
+  "/dashboard/page": "app/dashboard/page.js",
+  "/favicon.ico/route": "app/favicon.ico/route.js",
+  "/page": "app/page.js"
+}
