@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 import { Navbar } from "./components/Navbar";
 import { ClerkProvider } from '@clerk/nextjs'
+import { ToastContainer } from "react-toastify";
 
 export const metadata: Metadata = {
   title: "AI Photobooth",
@@ -17,6 +18,7 @@ export default function RootLayout({
     <ClerkProvider>
       <html lang="en">
         <body>
+          <ToastContainer />
           <Navbar />
           {children}
         </body>

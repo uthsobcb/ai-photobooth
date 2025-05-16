@@ -8,7 +8,7 @@ import { LoadingOverlay } from "@/components/Loading";
 
 export default function Page() {
     const { albumId } = useParams();
-    const [matchedFaces, setMatchedFaces] = useState<string[]>([]);
+    const [matchedFaces, setMatchedFaces] = useState<{ url: string; score: number }[]>([]);
     const [isLoading, setIsLoading] = useState(false);
     const [isFinding, setIsFinding] = useState(false);
 
@@ -38,7 +38,10 @@ export default function Page() {
 
             if (data.matches) {
                 const fullUrlMatches = data.matches.map(
-                    (path: string) => `${process.env.NEXT_PUBLIC_API_URL}/images/${path}`
+                    (match: { path: string; score: number }) => ({
+                        url: `${process.env.NEXT_PUBLIC_API_URL}/images/${match.path}`,
+                        score: match.score,
+                    })
                 );
                 setMatchedFaces(fullUrlMatches);
             }
@@ -60,6 +63,7 @@ export default function Page() {
                     <div className="space-y-4">
                         <h2 className="text-xl font-semibold">Matched Faces</h2>
                         <Gallery images={matchedFaces} />
+
                     </div>
                 ) : (
                     <div className="text-center py-8 text-gray-500">No matches found</div>

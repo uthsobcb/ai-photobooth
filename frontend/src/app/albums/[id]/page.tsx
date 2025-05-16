@@ -7,6 +7,7 @@ import { UploadImageCard } from "@/components/UploadImageCard"
 import { Trash2Icon, DownloadIcon, Share2Icon } from "lucide-react"
 import { useCallback } from "react";
 import Image from "next/image"
+import { toast } from "react-toastify"
 
 export default function AlbumPage() {
     const params = useParams()
@@ -189,7 +190,7 @@ export default function AlbumPage() {
                             onClick={() => {
                                 const shareUrl = `${window.location.origin}/find/${params.id}`;
                                 navigator.clipboard.writeText(shareUrl);
-                                setModal({ show: true, message: "Link copied to clipboard!" });
+                                toast.success("Album link copied to clipboard!");
                             }}
                             className="flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white text-sm font-semibold px-4 py-2 rounded-md"
                         >
