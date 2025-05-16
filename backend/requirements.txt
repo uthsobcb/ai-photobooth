@@ -7,3 +7,6 @@ Werkzeug
 dlib  # Required by face-recognition
 Pillow
 git+https://github.com/ageitgey/face_recognition_models
+pymongo
+flask-cors
+dotenv
