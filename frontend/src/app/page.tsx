@@ -61,12 +61,7 @@ const Home: FC = () => {
                         >
                             Get Started
                         </Link>
-                        <Link
-                            href="/find"
-                            className="text-lg font-semibold leading-6 text-gray-900 hover:text-gray-700 flex items-center group"
-                        >
-                            Learn more <span className="ml-1 group-hover:translate-x-1 transition-transform">→</span>
-                        </Link>
+
                     </div>
                 </div>
             </section>
