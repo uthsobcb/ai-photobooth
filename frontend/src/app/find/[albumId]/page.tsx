@@ -10,7 +10,7 @@ import { API, postPhoto } from "@/lib/utils";
 
 export default function Page() {
     const { albumId } = useParams();
-    const [matchedFaces, setMatchedFaces] = useState<{ url: string; score: number }[]>([]);
+    const [matchedFaces, setMatchedFaces] = useState<{ url: string; strong: boolean }[]>([]);
     const [isLoading, setIsLoading] = useState(false);
     const [searched, setSearched] = useState(false);
 
@@ -19,9 +19,9 @@ export default function Page() {
         setIsLoading(true);
         try {
             const data = await postPhoto(`/albums/${albumId}/find_faces`, imageData);
-            setMatchedFaces(data.matches.map((m: { path: string; score: number }) => ({
+            setMatchedFaces(data.matches.map((m: { path: string; strong: boolean }) => ({
                 url: `${API}/images/${m.path}`,
-                score: m.score,
+                strong: m.strong,
             })));
             setSearched(true);
         } catch (error) {

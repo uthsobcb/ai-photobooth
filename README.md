@@ -3,13 +3,13 @@
 Hosts upload an event's photos once. Guests open a link, take a selfie, and get every photo they appear in.
 
 - **Frontend:** Next.js 16 (App Router), React 19, Tailwind 4, Clerk 7 for sign-in
-- **Backend:** Flask, `face_recognition` (dlib) for face encodings, FAISS for per-album search, MongoDB for album records
+- **Backend:** Flask, InsightFace (RetinaFace detector + ArcFace embeddings) for faces, FAISS for per-album search, MongoDB for album records
 
 ## How it works
 
-1. A signed-in host creates an album and uploads photos. Each face in each photo is encoded (128-d) and added to that album's FAISS index.
+1. A signed-in host creates an album and uploads photos. Each face in each photo is encoded (512-d ArcFace embedding) and added to that album's FAISS index.
 2. The host shares the guest link `/find/<album_id>`. No account is needed to use it.
-3. A guest takes a selfie or uploads a photo. The largest face is compared with the album index and every photo within distance 0.6 is returned, best match first, with a match percentage.
+3. A guest takes a selfie or uploads a photo. The largest face is compared with the album index by cosine similarity. Every photo at or above the match threshold is returned, best first, labelled "Strong match" or "Possible match".
 
 Guest selfies are decoded in memory and never saved. Deleting a photo removes its faces from the index; deleting an album removes its images and index.
 
@@ -31,7 +31,7 @@ frontend/   Next.js app
 
 ### Backend
 
-Needs Python 3.9+, a MongoDB database, and the ability to build `dlib` (CMake and a C++ compiler).
+Needs Python 3.9 to 3.12 (onnxruntime has no wheels for newer versions yet), a MongoDB database, and a C++ compiler (InsightFace builds a small extension on install). On first start it downloads the face model (about 280 MB) to `~/.insightface`.
 
 ```bash
 cd backend
@@ -39,7 +39,11 @@ python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 # create backend/.env with the variables below, then:
 python main.py         # serves on http://localhost:7860
+python main.py reindex # rebuild every album's face index (needed after changing FACE_MODEL)
+pip install mongomock && python test_search.py   # end-to-end check of upload, search and delete
 ```
+
+Albums indexed with the old dlib model are rebuilt automatically from their stored photos the first time they're used. For large albums run `python main.py reindex` first.
 
 `backend/.env`:
 
@@ -50,6 +54,10 @@ python main.py         # serves on http://localhost:7860
 | `IMAGE_FOLDER` | no | Where photos are stored (default `Images`) |
 | `VECTOR_FOLDER` | no | Where per-album indexes are stored (default `album_vectors`) |
 | `FLASK_DEBUG` | no | Set to `1` to enable Flask debug mode |
+| `FACE_MODEL` | no | InsightFace model pack (default `buffalo_l`) |
+| `FACE_DET_SIZE` | no | Detector input size in px (default `960`). Larger finds smaller faces but is slower |
+| `MATCH_THRESHOLD` | no | Minimum cosine similarity to return a photo (default `0.40`) |
+| `STRONG_THRESHOLD` | no | Similarity at or above which a photo is a "strong match" (default `0.55`) |
 
 ### Frontend
 
@@ -97,4 +105,6 @@ Protected routes expect `Authorization: Bearer <Clerk session token>`.
 - **Pricing is a demo.** The plans on the landing page are placeholders. Nothing limits albums or photos, and there is no checkout.
 - **Album pages are viewable by anyone with the link.** Only uploading, renaming and deleting are owner-only. The guest link shows only matching photos.
 - **Photos and indexes are stored on local disk.** Use a persistent volume or move them to object storage before deploying somewhere with an ephemeral filesystem.
-- **Face search uses the HOG detector.** It is fast on CPU but works best with clear, front-facing faces.
+- **Model licence.** InsightFace's pretrained models are licensed for non-commercial research use. Check the terms before using this commercially, or set `FACE_MODEL` to a model you are licensed to use.
+- **Thresholds are defaults, not tuned.** `MATCH_THRESHOLD` and `STRONG_THRESHOLD` should be checked against a labelled sample of your own photos.
+- **Indexing and search run on CPU.** Large albums take longer to upload and to reindex.

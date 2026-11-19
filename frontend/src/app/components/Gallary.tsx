@@ -5,15 +5,12 @@ import { cn, downloadImage } from "@/lib/utils"
 import { DownloadIcon } from "lucide-react"
 import { toast } from "react-toastify"
 
-// Backend score is Euclidean distance (0 = identical, 0.6 = cutoff)
-const confidence = (score: number) => Math.max(0, Math.round((1 - score / 0.6) * 100))
-
-export function Gallery({ images }: { images: { url: string; score: number }[] }) {
+export function Gallery({ images }: { images: { url: string; strong: boolean }[] }) {
     if (images.length === 0) return null
 
     return (
         <div className="grid auto-rows-[160px] grid-cols-2 gap-3 sm:auto-rows-[200px] md:grid-cols-4">
-            {images.map(({ url, score }, index) => (
+            {images.map(({ url, strong }, index) => (
                 <div
                     key={url}
                     className={cn(
@@ -38,8 +35,8 @@ export function Gallery({ images }: { images: { url: string; score: number }[] }
                     >
                         <DownloadIcon className="h-4 w-4" />
                     </button>
-                    <span className="absolute bottom-2 left-2 rounded-full bg-focus px-2.5 py-1 text-xs font-bold text-ink">
-                        {confidence(score)}% match
+                    <span className={`absolute bottom-2 left-2 rounded-full px-2.5 py-1 text-xs font-bold text-ink ${strong ? "bg-focus" : "bg-white"}`}>
+                        {strong ? "Strong match" : "Possible match"}
                     </span>
                 </div>
             ))}

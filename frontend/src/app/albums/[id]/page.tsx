@@ -41,7 +41,7 @@ export default function AlbumPage() {
     const handleImageUpload = async (imageData: string) => {
         setUploading((n) => n + 1)
         try {
-            await postPhoto(`/albums/${id}/upload`, imageData, await getToken())
+            await postPhoto(`/albums/${id}/upload`, imageData, await getToken(), user?.id)
             toast.success("Photo added")
             refresh()
         } catch (error) {

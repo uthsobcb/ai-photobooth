@@ -4,8 +4,8 @@ import uuid
 import cv2
 import numpy as np
 import faiss
-import face_recognition
-import pickle
+import json
+import sys
 import jwt
 import pymongo
 from flask import Flask, request, jsonify, send_file
@@ -15,6 +15,7 @@ from flask_cors import CORS
 from bson.objectid import ObjectId
 from datetime import datetime
 from dotenv import load_dotenv
+from insightface.app import FaceAnalysis
 
 # Load environment variables
 load_dotenv()
@@ -46,9 +47,22 @@ db = client.photobooth
 albums_collection = db.albums
 
 ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg'}
-MAX_SIDE = 1600          # downscale big photos before face detection (speed)
-MAX_DISTANCE = 0.6       # face_recognition's standard Euclidean threshold
-MAX_RESULTS = 100
+MAX_SIDE = 2000          # downscale huge photos before face detection (speed)
+MAX_RESULTS = 300        # faces fetched from the index per search
+
+# Face model: InsightFace ArcFace embeddings (512-d, L2-normalised) compared by cosine similarity.
+# NOTE: InsightFace's pretrained models are licensed for non-commercial research use.
+FACE_MODEL = os.getenv('FACE_MODEL', 'buffalo_l')
+DET_SIZE = int(os.getenv('FACE_DET_SIZE', '960'))                    # larger = finds smaller faces, slower
+EMB_DIM = 512
+MATCH_THRESHOLD = float(os.getenv('MATCH_THRESHOLD', '0.40'))        # "possible match" cutoff
+STRONG_THRESHOLD = float(os.getenv('STRONG_THRESHOLD', '0.55'))      # "strong match" cutoff
+MIN_DET_SCORE = 0.5      # ignore low-confidence detections
+MIN_FACE_PX = 32         # ignore faces smaller than this (too little detail to match reliably)
+
+face_app = FaceAnalysis(name=FACE_MODEL, allowed_modules=['detection', 'recognition'],
+                        providers=['CPUExecutionProvider'])
+face_app.prepare(ctx_id=-1, det_size=(DET_SIZE, DET_SIZE))
 
 
 def allowed_file(filename):
@@ -63,42 +77,87 @@ def oid(value):
         return None
 
 
-def get_album_index_path(album_id):
+def album_paths(album_id):
     folder = os.path.join(VECTOR_FOLDER, str(album_id))
     os.makedirs(folder, exist_ok=True)
-    return os.path.join(folder, "index.pkl")
+    return os.path.join(folder, "index.faiss"), os.path.join(folder, "meta.json"), folder
 
 
-def read_faces(file):
-    """Decode an upload in memory -> list of (box, 128d encoding). None if unreadable."""
-    data = np.frombuffer(file.read(), np.uint8)
-    image = cv2.imdecode(data, cv2.IMREAD_COLOR)
+def detect(image):
+    """Run the detector without upscaling: it fails on faces much larger than ~250px, which a selfie easily is."""
+    h, w = image.shape[:2]
+    if max(h, w) < DET_SIZE:
+        canvas = np.zeros((DET_SIZE, DET_SIZE, 3), np.uint8)
+        canvas[:h, :w] = image
+        image = canvas
+    return face_app.get(image)
+
+
+def read_faces(raw):
+    """Image bytes -> list of (face_area, embedding). None if the bytes aren't an image."""
+    image = cv2.imdecode(np.frombuffer(raw, np.uint8), cv2.IMREAD_COLOR)
     if image is None:
         return None
-    h, w = image.shape[:2]
-    scale = MAX_SIDE / max(h, w)
-    if scale < 1:
-        image = cv2.resize(image, None, fx=scale, fy=scale, interpolation=cv2.INTER_AREA)
-    rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-    boxes = face_recognition.face_locations(rgb, model="hog")
-    return list(zip(boxes, face_recognition.face_encodings(rgb, boxes)))
+    s = MAX_SIDE / max(image.shape[:2])
+    if s < 1:
+        image = cv2.resize(image, None, fx=s, fy=s, interpolation=cv2.INTER_AREA)
+
+    scale, faces = 1.0, detect(image)
+    while not faces and min(image.shape[:2]) >= 96:  # nothing found: faces may be too large, retry smaller
+        image = cv2.resize(image, None, fx=0.5, fy=0.5, interpolation=cv2.INTER_AREA)
+        scale *= 0.5
+        faces = detect(image)
+
+    out = []
+    for f in faces:
+        x1, y1, x2, y2 = f.bbox / scale  # back to the uploaded photo's pixels
+        if f.det_score >= MIN_DET_SCORE and min(x2 - x1, y2 - y1) >= MIN_FACE_PX:
+            out.append(((x2 - x1) * (y2 - y1), f.normed_embedding))
+    return out
 
 
-def remove_from_index(album_id, rel_path):
-    """Drop every face of one image from the album's FAISS index."""
-    path = get_album_index_path(album_id)
-    if not os.path.exists(path):
-        return
-    with open(path, "rb") as f:
-        index, metadata = pickle.load(f)
+def save_index(album_id, index, metadata):
+    index_path, meta_path, _ = album_paths(album_id)
+    faiss.write_index(index, index_path)
+    with open(meta_path, "w") as f:
+        json.dump(metadata, f)
+
+
+def get_index(album):
+    """(index, metadata) for an album. Missing or from the old dlib model -> rebuilt from the stored photos."""
+    index_path, meta_path, folder = album_paths(album["_id"])
+    if os.path.exists(index_path) and os.path.exists(meta_path):
+        with open(meta_path) as f:
+            return faiss.read_index(index_path), json.load(f)
+
+    # ponytail: rebuilds inline on first use, slow for huge albums; run `python main.py reindex` ahead of time
+    index, metadata = faiss.IndexFlatIP(EMB_DIM), []
+    for rel in album.get("images", []):
+        path = safe_join(IMAGE_FOLDER, rel)
+        if not path or not os.path.isfile(path):
+            continue
+        with open(path, "rb") as f:
+            for _, emb in read_faces(f.read()) or []:
+                index.add(emb.reshape(1, -1).astype(np.float32))
+                metadata.append(rel)
+    if metadata:
+        save_index(album["_id"], index, metadata)
+    legacy = os.path.join(folder, "index.pkl")
+    if os.path.exists(legacy):
+        os.remove(legacy)
+    return index, metadata
+
+
+def remove_from_index(album, rel_path):
+    """Drop every face of one image from the album's index."""
+    index, metadata = get_index(album)
     keep = [i for i, m in enumerate(metadata) if m != rel_path]
     if len(keep) == len(metadata):
         return
-    new_index = faiss.IndexFlatL2(128)
+    new_index = faiss.IndexFlatIP(EMB_DIM)
     if keep:
         new_index.add(index.reconstruct_n(0, index.ntotal)[keep])
-    with open(path, "wb") as f:
-        pickle.dump((new_index, [metadata[i] for i in keep]), f)
+    save_index(album["_id"], new_index, [metadata[i] for i in keep])
 
 
 # Set CLERK_JWKS_URL (https://<your-clerk-domain>/.well-known/jwks.json) to enforce auth.
@@ -112,7 +171,7 @@ def current_user():
     """Clerk user id from the Bearer token, or None if missing/invalid."""
     if not jwks:  # dev fallback
         data = request.get_json(silent=True) or {}
-        return data.get('user_id') or request.args.get('user_id')
+        return data.get('user_id') or request.args.get('user_id') or request.form.get('user_id')
     try:
         token = request.headers.get('Authorization', '').removeprefix('Bearer ')
         key = jwks.get_signing_key_from_jwt(token).key
@@ -162,30 +221,24 @@ def upload_image(album_id):
     if forbidden(album):
         return jsonify({'error': 'Not your album'}), 403
 
-    faces = read_faces(file)
+    raw = file.read()
+    faces = read_faces(raw)
     if faces is None:
         return jsonify({'error': 'Could not read image file'}), 400
     if not faces:
         return jsonify({'error': 'No face detected in this photo'}), 400
 
-    file.seek(0)
+    index, metadata = get_index(album)  # before the new photo is saved, so a rebuild doesn't double-count it
     album_folder = os.path.join(IMAGE_FOLDER, str(album_id))
     os.makedirs(album_folder, exist_ok=True)
     filename = f"{datetime.now():%Y%m%d_%H%M%S}_{uuid.uuid4().hex[:6]}_{secure_filename(file.filename)}"
-    file.save(os.path.join(album_folder, filename))
+    with open(os.path.join(album_folder, filename), "wb") as f:
+        f.write(raw)
     relative_path = os.path.join(str(album_id), filename)
 
-    index_path = get_album_index_path(album_id)
-    if os.path.exists(index_path):
-        with open(index_path, "rb") as f:
-            index, metadata = pickle.load(f)
-    else:
-        index, metadata = faiss.IndexFlatL2(128), []
-
-    index.add(np.array([enc for _, enc in faces], dtype=np.float32))
+    index.add(np.array([emb for _, emb in faces], dtype=np.float32))
     metadata.extend([relative_path] * len(faces))
-    with open(index_path, "wb") as f:
-        pickle.dump((index, metadata), f)
+    save_index(album_id, index, metadata)
 
     albums_collection.update_one({"_id": oid_}, {"$push": {"images": relative_path}})
     return jsonify({'message': 'Image uploaded and processed', 'filename': relative_path, 'faces': len(faces)})
@@ -198,35 +251,32 @@ def find_faces(album_id):
     if not file or not file.filename or not allowed_file(file.filename):
         return jsonify({'error': 'Please choose a PNG or JPG image'}), 400
 
-    faces = read_faces(file)
+    oid_ = oid(album_id)
+    album = oid_ and albums_collection.find_one({"_id": oid_})
+    if not album:
+        return jsonify({'error': 'Album not found'}), 404
+
+    faces = read_faces(file.read())
     if faces is None:
         return jsonify({'error': 'Could not read image file'}), 400
     if not faces:
         return jsonify({'error': 'No face detected in your photo'}), 400
 
-    if not oid(album_id):
-        return jsonify({'error': 'Album not found'}), 404
-    index_path = get_album_index_path(album_id)
-    if not os.path.exists(index_path):
-        return jsonify({"matches": []})  # album exists but has no photos yet
-
-    with open(index_path, "rb") as f:
-        index, metadata = pickle.load(f)
+    index, metadata = get_index(album)
     if index.ntotal == 0:
-        return jsonify({"matches": []})
+        return jsonify({"matches": []})  # album has no photos yet
 
     # Largest face in the frame is the subject; background faces are ignored
-    box, encoding = max(faces, key=lambda f: (f[0][2] - f[0][0]) * (f[0][1] - f[0][3]))
-    query = np.array(encoding, dtype=np.float32).reshape(1, -1)
-    D, I = index.search(query, k=min(MAX_RESULTS, index.ntotal))
+    _, embedding = max(faces, key=lambda f: f[0])
+    sims, ids = index.search(embedding.reshape(1, -1).astype(np.float32), k=min(MAX_RESULTS, index.ntotal))
 
-    best = {}  # one entry per photo, closest face wins. FAISS L2 is squared distance.
-    for i, d in zip(I[0], D[0]):
-        dist = float(np.sqrt(d))
-        if 0 <= i < len(metadata) and dist < MAX_DISTANCE:
-            best[metadata[i]] = min(dist, best.get(metadata[i], dist))
+    best = {}  # one entry per photo, closest face wins
+    for i, sim in zip(ids[0], sims[0]):
+        if i >= 0 and sim >= MATCH_THRESHOLD:
+            best[metadata[i]] = max(float(sim), best.get(metadata[i], 0.0))
 
-    matches = [{"path": p, "score": d} for p, d in sorted(best.items(), key=lambda kv: kv[1])]
+    matches = [{"path": p, "score": round(s, 3), "strong": s >= STRONG_THRESHOLD}
+               for p, s in sorted(best.items(), key=lambda kv: -kv[1])]
     return jsonify({"matches": matches})
 
 
@@ -290,7 +340,7 @@ def delete_image():
     image_path = safe_join(IMAGE_FOLDER, image_name)
     if image_path and os.path.exists(image_path):
         os.remove(image_path)
-    remove_from_index(album_id, image_name)
+    remove_from_index(album, image_name)
     albums_collection.update_one({"_id": oid_}, {"$pull": {"images": image_name}})
     return jsonify({"message": "Image deleted successfully"})
 
@@ -337,4 +387,13 @@ def delete_album():
 
 
 if __name__ == '__main__':
+    if sys.argv[1:] == ['reindex']:  # rebuild every album's face index with the current model
+        for album in albums_collection.find():
+            for name in ("index.faiss", "meta.json"):
+                p = os.path.join(VECTOR_FOLDER, str(album["_id"]), name)
+                if os.path.exists(p):
+                    os.remove(p)
+            get_index(album)
+            print("reindexed", album["_id"], album["album_name"])
+        sys.exit(0)
     app.run(debug=os.getenv('FLASK_DEBUG') == '1', host='0.0.0.0', port=7860)
