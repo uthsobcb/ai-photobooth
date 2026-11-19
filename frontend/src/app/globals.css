@@ -1,6 +1,15 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss";
+
+@theme inline {
+  --color-ink: #0E1130;
+  --color-mist: #ECEEF8;
+  --color-booth: #2330D8;
+  --color-booth-dark: #1A25B0;
+  --color-focus: #FFD21F;
+  --color-alert: #D12B3F;
+  --font-display: var(--font-bricolage), system-ui, sans-serif;
+  --font-sans: var(--font-instrument), system-ui, sans-serif;
+}
 
 @layer base {
   body { @apply bg-mist text-ink font-sans antialiased; }

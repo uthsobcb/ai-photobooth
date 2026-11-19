@@ -2,7 +2,7 @@
 
 Hosts upload an event's photos once. Guests open a link, take a selfie, and get every photo they appear in.
 
-- **Frontend:** Next.js 15 (App Router), React 19, Tailwind, Clerk for sign-in
+- **Frontend:** Next.js 16 (App Router), React 19, Tailwind 4, Clerk 7 for sign-in
 - **Backend:** Flask, `face_recognition` (dlib) for face encodings, FAISS for per-album search, MongoDB for album records
 
 ## How it works
@@ -53,12 +53,13 @@ python main.py         # serves on http://localhost:7860
 
 ### Frontend
 
-Needs Node 20 or 22 LTS.
+Needs Node 22 or 24 LTS (Next 16 requires 20.9+, and Node 20 is end-of-life).
 
 ```bash
 cd frontend
 npm install
 npm run dev            # http://localhost:3000
+npm run lint           # ESLint 10 (flat config)
 ```
 
 `frontend/.env.local`:
@@ -69,7 +70,7 @@ npm run dev            # http://localhost:3000
 | `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` | From the Clerk dashboard |
 | `CLERK_SECRET_KEY` | From the Clerk dashboard |
 
-Without Clerk keys, Clerk runs in keyless mode in development with temporary keys.
+Both Clerk keys are required, including in development (Clerk 7 has no keyless mode), and `next build` also needs them.
 
 If you must use Node 25, `next dev` fails with `localStorage.getItem is not a function`. Start it with `NODE_OPTIONS=--no-experimental-webstorage npm run dev`.
 

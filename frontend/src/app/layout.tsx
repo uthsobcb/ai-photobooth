@@ -6,8 +6,8 @@ import { ClerkProvider } from "@clerk/nextjs";
 import { ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 
-const display = Bricolage_Grotesque({ subsets: ["latin"], variable: "--font-display" });
-const body = Instrument_Sans({ subsets: ["latin"], variable: "--font-body" });
+const display = Bricolage_Grotesque({ subsets: ["latin"], variable: "--font-bricolage" });
+const body = Instrument_Sans({ subsets: ["latin"], variable: "--font-instrument" });
 
 export const metadata: Metadata = {
   title: "AI Photo Finder",
@@ -16,7 +16,7 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <ClerkProvider>
+    <ClerkProvider afterSignOutUrl="/">
       <html lang="en" className={`${display.variable} ${body.variable}`}>
         <body>
           <ToastContainer position="bottom-center" theme="dark" />

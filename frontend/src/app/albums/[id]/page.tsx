@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect, useSyncExternalStore } from "react"
 import { useParams } from "next/navigation"
 import { useUser, useAuth } from "@clerk/nextjs"
 import Image from "next/image"
@@ -22,29 +22,28 @@ export default function AlbumPage() {
     const [toDelete, setToDelete] = useState<string | null>(null)
 
     const isOwner = !!user?.id && albumData?.owner === user.id
-    const [origin, setOrigin] = useState("")
-    useEffect(() => setOrigin(window.location.origin), [])
+    // Site origin without a mount effect: "" on the server, real value on the client
+    const origin = useSyncExternalStore(() => () => {}, () => window.location.origin, () => "")
     const shareUrl = `${origin}/find/${id}`
 
-    const fetchAlbumData = useCallback(async () => {
-        try {
-            const response = await fetch(`${API}/albums/${id}`)
-            if (!response.ok) throw new Error("Album not found")
-            setAlbumData(await response.json())
-            setStatus("ready")
-        } catch {
-            setStatus("missing")
-        }
-    }, [id])
+    const [version, setVersion] = useState(0)
+    const refresh = () => setVersion((v) => v + 1)
 
-    useEffect(() => { fetchAlbumData() }, [fetchAlbumData])
+    useEffect(() => {
+        let stale = false
+        fetch(`${API}/albums/${id}`)
+            .then((r) => { if (!r.ok) throw new Error("Album not found"); return r.json() })
+            .then((data) => { if (!stale) { setAlbumData(data); setStatus("ready") } })
+            .catch(() => { if (!stale) setStatus("missing") })
+        return () => { stale = true }
+    }, [id, version])
 
     const handleImageUpload = async (imageData: string) => {
         setUploading((n) => n + 1)
         try {
             await postPhoto(`/albums/${id}/upload`, imageData, await getToken())
             toast.success("Photo added")
-            fetchAlbumData()
+            refresh()
         } catch (error) {
             toast.error(error instanceof Error ? error.message : "Upload failed. Try again.")
         } finally {
@@ -63,7 +62,7 @@ export default function AlbumPage() {
             })
             if (!response.ok) throw new Error()
             toast.success("Photo deleted")
-            fetchAlbumData()
+            refresh()
         } catch {
             toast.error("Couldn't delete the photo. Try again.")
         }

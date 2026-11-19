@@ -3,7 +3,7 @@
 import { useState } from "react"
 import Link from "next/link"
 import { Menu, X } from "lucide-react"
-import { SignInButton, UserButton, SignedIn, SignedOut } from "@clerk/nextjs"
+import { SignInButton, UserButton, Show } from "@clerk/nextjs"
 import { Button } from "./Button"
 
 export function Logo() {
@@ -30,14 +30,14 @@ export function Navbar() {
                 <div className="hidden items-center gap-2 md:flex">
                     <Link href="/#pricing" className={link}>Pricing</Link>
                     <Link href="/#faq" className={link}>FAQ</Link>
-                    <SignedIn>
+                    <Show when="signed-in">
                         <Link href="/dashboard" className={link}>My albums</Link>
-                        <UserButton afterSignOutUrl="/" />
-                    </SignedIn>
-                    <SignedOut>
+                        <UserButton />
+                    </Show>
+                    <Show when="signed-out">
                         <SignInButton mode="modal"><button className={link}>Sign in</button></SignInButton>
                         <Link href="/dashboard"><Button size="sm">Create an album</Button></Link>
-                    </SignedOut>
+                    </Show>
                 </div>
 
                 <button onClick={() => setIsOpen(!isOpen)} className="rounded-full p-2 md:hidden" aria-label="Toggle menu" aria-expanded={isOpen}>
@@ -51,14 +51,14 @@ export function Navbar() {
                         <Link href="/" className={link}>Home</Link>
                         <Link href="/#pricing" className={link}>Pricing</Link>
                         <Link href="/#faq" className={link}>FAQ</Link>
-                        <SignedIn>
+                        <Show when="signed-in">
                             <Link href="/dashboard" className={link}>My albums</Link>
-                            <div className="px-3"><UserButton afterSignOutUrl="/" /></div>
-                        </SignedIn>
-                        <SignedOut>
+                            <div className="px-3"><UserButton /></div>
+                        </Show>
+                        <Show when="signed-out">
                             <SignInButton mode="modal"><button className={link}>Sign in</button></SignInButton>
                             <Link href="/dashboard"><Button size="sm">Create an album</Button></Link>
-                        </SignedOut>
+                        </Show>
                     </div>
                 </div>
             )}

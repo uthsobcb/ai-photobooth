@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useUser, useAuth, SignInButton } from "@clerk/nextjs";
@@ -29,21 +29,29 @@ export default function DashboardPage() {
     const [name, setName] = useState("");
     const [busy, setBusy] = useState(false);
 
-    const fetchAlbums = useCallback(async () => {
-        if (!user?.id) return;
-        try {
-            const response = await fetch(`${API}/fetch-albums?user_id=${user.id}`, {
-                headers: bearer(await getToken()),
-            });
-            if (!response.ok) throw new Error();
-            setAlbums((await response.json()).albums);
-        } catch {
-            setAlbums((a) => a ?? []);
-            toast.error("Could not load your albums");
-        }
-    }, [user?.id, getToken]);
+    const [version, setVersion] = useState(0);
+    const refresh = () => setVersion((v) => v + 1);
 
-    useEffect(() => { fetchAlbums(); }, [fetchAlbums]);
+    useEffect(() => {
+        if (!user?.id) return;
+        let stale = false;
+        (async () => {
+            try {
+                const response = await fetch(`${API}/fetch-albums?user_id=${user.id}`, {
+                    headers: bearer(await getToken()),
+                });
+                if (!response.ok) throw new Error();
+                const data = await response.json();
+                if (!stale) setAlbums(data.albums);
+            } catch {
+                if (!stale) {
+                    setAlbums((a) => a ?? []);
+                    toast.error("Could not load your albums");
+                }
+            }
+        })();
+        return () => { stale = true; };
+    }, [user?.id, getToken, version]);
 
     const open = (d: Dialog) => {
         setName(d && d.kind !== "create" ? d.album.album_name : "");
@@ -74,7 +82,7 @@ export default function DashboardPage() {
             setDialog(null);
             if (dialog.kind === "create") return router.push(`/albums/${data.album_id}`);
             toast.success(dialog.kind === "edit" ? "Album renamed" : "Album deleted");
-            fetchAlbums();
+            refresh();
         } catch (error) {
             toast.error(error instanceof Error ? error.message : "Request failed");
         } finally {
