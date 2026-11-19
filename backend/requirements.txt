@@ -10,3 +10,4 @@ git+https://github.com/ageitgey/face_recognition_models
 pymongo
 flask-cors
 dotenv
+PyJWT[crypto]
