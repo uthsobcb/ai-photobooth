@@ -1,67 +1,48 @@
+"use client"
+
 import Image from "next/image"
-import { cn } from "@/lib/utils"
+import { cn, downloadImage } from "@/lib/utils"
 import { DownloadIcon } from "lucide-react"
+import { toast } from "react-toastify"
 
-interface GalleryProps {
-    images: {
-        url: string
-        score: number
-    }[]
-}
+// Backend score is Euclidean distance (0 = identical, 0.6 = cutoff)
+const confidence = (score: number) => Math.max(0, Math.round((1 - score / 0.6) * 100))
 
-const downloadImage = (imageUrl: string) => {
-    const link = document.createElement("a")
-    link.href = imageUrl
-    link.download = imageUrl.split("/").pop() || "downloaded-image.jpg"
-    document.body.appendChild(link)
-    link.click()
-    document.body.removeChild(link)
-}
-
-export function Gallery({ images }: GalleryProps) {
+export function Gallery({ images }: { images: { url: string; score: number }[] }) {
     if (images.length === 0) return null
 
     return (
-        <div className="p-4 rounded-xl">
-            <div className="grid grid-cols-2 md:grid-cols-4 auto-rows-[180px] gap-4 max-w-7xl mx-auto">
-                {images.map(({ url, score }, index) => (
-                    <div
-                        key={index}
-                        className={cn(
-                            "relative group rounded-xl overflow-hidden transition-all duration-300 hover:scale-[1.02] hover:shadow-xl",
-                            index === 0 && "col-span-2 row-span-2",
-                            "md:" +
-                            (index === 1
-                                ? "col-span-2"
-                                : index === 2
-                                    ? "row-span-2"
-                                    : index === 5
-                                        ? "col-span-2"
-                                        : ""),
-                            "bg-gradient-to-br from-muted/50 to-muted border"
-                        )}
+        <div className="grid auto-rows-[160px] grid-cols-2 gap-3 sm:auto-rows-[200px] md:grid-cols-4">
+            {images.map(({ url, score }, index) => (
+                <div
+                    key={url}
+                    className={cn(
+                        "group relative overflow-hidden rounded-xl bg-white",
+                        index === 0 && "col-span-2 row-span-2",
+                        index === 1 && "md:col-span-2",
+                        index === 2 && "md:row-span-2",
+                        index === 5 && "md:col-span-2",
+                    )}
+                >
+                    <Image
+                        src={url}
+                        alt={`Photo ${index + 1} of you`}
+                        fill
+                        className="object-cover transition-transform duration-500 group-hover:scale-105"
+                        sizes="(max-width: 768px) 50vw, 25vw"
+                    />
+                    <button
+                        aria-label="Download photo"
+                        onClick={() => downloadImage(url).catch(() => toast.error("Download failed. Try again."))}
+                        className="absolute right-2 top-2 rounded-full bg-white p-2.5 shadow md:opacity-0 md:group-hover:opacity-100 focus:opacity-100 transition-opacity"
                     >
-                        <Image
-                            src={url || "/placeholder.svg"}
-                            alt={`Matched face ${index + 1}`}
-                            fill
-                            className="object-cover transition-transform group-hover:scale-105"
-                            sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
-                        />
-
-                        <button
-                            onClick={() => downloadImage(url)}
-                            className="absolute top-2 right-2 bg-blue-500 p-2 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
-                        >
-                            <DownloadIcon className="w-4 h-4 text-white" />
-                        </button>
-
-                        <div className="absolute bottom-2 left-2 bg-black/70 text-white text-xs px-2 py-1 rounded">
-                            Score: {score.toFixed(3)}
-                        </div>
-                    </div>
-                ))}
-            </div>
+                        <DownloadIcon className="h-4 w-4" />
+                    </button>
+                    <span className="absolute bottom-2 left-2 rounded-full bg-focus px-2.5 py-1 text-xs font-bold text-ink">
+                        {confidence(score)}% match
+                    </span>
+                </div>
+            ))}
         </div>
     )
 }

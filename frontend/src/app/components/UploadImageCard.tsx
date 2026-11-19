@@ -1,85 +1,55 @@
 "use client"
 
 import { useRef, useState } from "react"
-import { Button } from "@/components/Button"
-import { ImageIcon, UploadIcon } from "lucide-react"
+import { ImagePlusIcon } from "lucide-react"
+import { toast } from "react-toastify"
 
 interface UploadImageCardProps {
     onImageUpload: (imageData: string) => void
+    multiple?: boolean
 }
 
-export function UploadImageCard({ onImageUpload }: UploadImageCardProps) {
+export function UploadImageCard({ onImageUpload, multiple = false }: UploadImageCardProps) {
     const fileInputRef = useRef<HTMLInputElement>(null)
     const [isDragging, setIsDragging] = useState(false)
 
-    const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-        const file = event.target.files?.[0]
-        if (file) {
+    const handleFiles = (files?: FileList | null) => {
+        const list = Array.from(files ?? [])
+        const images = list.filter((f) => f.type.startsWith("image/"))
+        if (list.length && !images.length) toast.error("Choose a PNG or JPG image")
+        for (const file of multiple ? images : images.slice(0, 1)) {
             const reader = new FileReader()
-            reader.onloadend = () => {
-                if (reader.result) {
-                    onImageUpload(reader.result.toString())
-                }
-            }
-            reader.readAsDataURL(file)
-        }
-    }
-
-    const handleDragOver = (e: React.DragEvent) => {
-        e.preventDefault()
-        setIsDragging(true)
-    }
-
-    const handleDragLeave = (e: React.DragEvent) => {
-        e.preventDefault()
-        setIsDragging(false)
-    }
-
-    const handleDrop = (e: React.DragEvent) => {
-        e.preventDefault()
-        setIsDragging(false)
-
-        const file = e.dataTransfer.files?.[0]
-        if (file && file.type.startsWith('image/')) {
-            const reader = new FileReader()
-            reader.onloadend = () => {
-                if (reader.result) {
-                    onImageUpload(reader.result.toString())
-                }
-            }
+            reader.onload = () => reader.result && onImageUpload(reader.result.toString())
             reader.readAsDataURL(file)
         }
     }
 
     return (
         <div
-            className={`flex flex-col items-center p-6 border-2 border-dashed rounded-2xl shadow-lg transition-all duration-200 
-                ${isDragging
-                    ? 'border-blue-500 bg-blue-50'
-                    : 'border-gray-300 hover:border-gray-400 hover:bg-gray-50'
-                } cursor-pointer min-h-[200px] w-full max-w-xs justify-center`}
-            onDragOver={handleDragOver}
-            onDragLeave={handleDragLeave}
-            onDrop={handleDrop}
+            role="button"
+            tabIndex={0}
+            aria-label={multiple ? "Add photos" : "Choose a photo"}
+            className={`flex min-h-[160px] w-full cursor-pointer flex-col items-center justify-center gap-3 rounded-2xl border-2 border-dashed p-6 text-center transition-colors
+                ${isDragging ? "border-booth bg-booth/10" : "border-ink/25 bg-white hover:border-booth hover:bg-booth/5"}`}
+            onDragOver={(e) => { e.preventDefault(); setIsDragging(true) }}
+            onDragLeave={(e) => { e.preventDefault(); setIsDragging(false) }}
+            onDrop={(e) => { e.preventDefault(); setIsDragging(false); handleFiles(e.dataTransfer.files) }}
             onClick={() => fileInputRef.current?.click()}
+            onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && (e.preventDefault(), fileInputRef.current?.click())}
         >
             <input
                 type="file"
-                accept="image/*"
+                accept="image/png,image/jpeg"
+                multiple={multiple}
                 ref={fileInputRef}
                 className="hidden"
-                onChange={handleFileChange}
+                onChange={(e) => { handleFiles(e.target.files); e.target.value = "" }}
             />
-            <ImageIcon className={`w-16 h-16 mb-4 transition-colors duration-200 
-                ${isDragging ? 'text-blue-500' : 'text-gray-400'}`}
-            />
-            <p className="text-sm text-gray-600 mb-4 text-center">
-                Drag and drop your image here, or click to select
-            </p>
-            <Button variant="outline" className="pointer-events-none">
-                <UploadIcon className="w-4 h-4 mr-2" />
-                Upload Image
-            </Button>
+            <ImagePlusIcon className={`h-9 w-9 ${isDragging ? "text-booth" : "text-ink/50"}`} />
+            <div>
+                <p className="font-semibold">{multiple ? "Add photos to this album" : "Choose a photo of your face"}</p>
+                <p className="mt-1 text-sm text-ink/60">Drop {multiple ? "files" : "a file"} here or click to browse. PNG or JPG.</p>
+            </div>
         </div>
     )
 }

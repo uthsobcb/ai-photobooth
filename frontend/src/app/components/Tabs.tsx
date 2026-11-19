@@ -1,30 +1,16 @@
 import { createContext, useContext, useState, ReactNode } from "react"
 import { cn } from "@/lib/utils"
 
-interface TabsContextType {
-    activeTab: string
-    setActiveTab: (value: string) => void
-}
+const TabsContext = createContext<{ activeTab: string; setActiveTab: (v: string) => void } | undefined>(undefined)
 
-const TabsContext = createContext<TabsContextType | undefined>(undefined)
-
-export function useTabs() {
+function useTabs() {
     const context = useContext(TabsContext)
-    if (!context) {
-        throw new Error("useTabs must be used within a TabsProvider")
-    }
+    if (!context) throw new Error("Tabs components must be used within <Tabs>")
     return context
 }
 
-interface TabsProps {
-    defaultValue: string
-    children: ReactNode
-    className?: string
-}
-
-export function Tabs({ defaultValue, children, className }: TabsProps) {
+export function Tabs({ defaultValue, children, className }: { defaultValue: string; children: ReactNode; className?: string }) {
     const [activeTab, setActiveTab] = useState(defaultValue)
-
     return (
         <TabsContext.Provider value={{ activeTab, setActiveTab }}>
             <div className={cn("space-y-4", className)}>{children}</div>
@@ -32,30 +18,23 @@ export function Tabs({ defaultValue, children, className }: TabsProps) {
     )
 }
 
-interface TabsListProps {
-    children: ReactNode
-    className?: string
+// Segmented control
+export function TabsList({ children, className }: { children: ReactNode; className?: string }) {
+    return <div role="tablist" className={cn("flex gap-1 rounded-full bg-mist p-1", className)}>{children}</div>
 }
 
-export function TabsList({ children, className }: TabsListProps) {
-    return <div className={cn("flex border-b", className)}>{children}</div>
-}
-
-interface TabsTriggerProps {
-    value: string
-    children: ReactNode
-    className?: string
-}
-
-export function TabsTrigger({ value, children, className }: TabsTriggerProps) {
+export function TabsTrigger({ value, children, className }: { value: string; children: ReactNode; className?: string }) {
     const { activeTab, setActiveTab } = useTabs()
+    const active = activeTab === value
     return (
         <button
+            role="tab"
+            aria-selected={active}
             onClick={() => setActiveTab(value)}
             className={cn(
-                "flex-1 py-2 text-center text-gray-600 hover:bg-gray-100 focus:outline-none focus:ring-2",
-                activeTab === value && "border-b-2 border-blue-600 text-blue-600 font-semibold",
-                className
+                "flex flex-1 items-center justify-center gap-2 rounded-full py-2 text-sm font-semibold transition-colors",
+                active ? "bg-ink text-white" : "text-ink/60 hover:text-ink",
+                className,
             )}
         >
             {children}
@@ -63,13 +42,7 @@ export function TabsTrigger({ value, children, className }: TabsTriggerProps) {
     )
 }
 
-interface TabsContentProps {
-    value: string
-    children: ReactNode
-    className?: string
-}
-
-export function TabsContent({ value, children, className }: TabsContentProps) {
+export function TabsContent({ value, children, className }: { value: string; children: ReactNode; className?: string }) {
     const { activeTab } = useTabs()
-    return activeTab === value ? <div className={cn("p-4", className)}>{children}</div> : null
+    return activeTab === value ? <div role="tabpanel" className={className}>{children}</div> : null
 }

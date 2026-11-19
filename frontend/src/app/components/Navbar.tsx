@@ -1,77 +1,67 @@
 "use client"
 
 import { useState } from "react"
-import { Menu, X, Home, User } from "lucide-react"
 import Link from "next/link"
-import { SignInButton, SignUpButton, UserButton, SignedIn, SignedOut } from "@clerk/nextjs"
+import { Menu, X } from "lucide-react"
+import { SignInButton, UserButton, SignedIn, SignedOut } from "@clerk/nextjs"
+import { Button } from "./Button"
+
+export function Logo() {
+    return (
+        <span className="flex items-center gap-2.5 font-display text-xl font-extrabold tracking-tight">
+            <svg width="28" height="28" viewBox="0 0 28 28" aria-hidden>
+                <rect width="28" height="28" rx="8" fill="#2330D8" />
+                <path d="M7 12V8h4M21 12V8h-4M7 16v4h4M21 16v4h-4" stroke="#FFD21F" strokeWidth="2.4" fill="none" strokeLinecap="square" />
+            </svg>
+            Photo Finder
+        </span>
+    )
+}
 
 export function Navbar() {
     const [isOpen, setIsOpen] = useState(false)
+    const link = "rounded-full px-3 py-2 text-sm font-semibold text-ink/70 hover:text-ink"
 
     return (
-        <nav className="bg-white shadow-md fixed top-0 w-full z-50">
-            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-                <div className="flex justify-between items-center h-16">
-                    <Link href="/" className="text-xl font-bold text-gray-900">
-                        AI Photo Finder
-                    </Link>
+        <header className="fixed top-0 z-50 w-full border-b border-ink/10 bg-mist/85 backdrop-blur">
+            <nav className="mx-auto flex h-16 max-w-6xl items-center justify-between px-5">
+                <Link href="/" aria-label="Photo Finder home"><Logo /></Link>
 
-                    <div className="hidden md:flex items-center space-x-6">
-                        <Link href="/" className="flex items-center gap-2 text-gray-600 hover:text-black transition">
-                            <Home className="w-5 h-5" />
-                            <span>Home</span>
-                        </Link>
-                        <SignedIn>
-                            <Link href="/dashboard" className="flex items-center gap-2 text-gray-600 hover:text-black transition">
-                                <User className="w-5 h-5" />
-                                <span>My Albums</span>
-                            </Link>
-                            <UserButton afterSignOutUrl="/" />
-                        </SignedIn>
-                        <SignedOut>
-                            <SignInButton mode="modal">
-                                <button className="text-gray-600 hover:text-black transition">
-                                    Sign In
-                                </button>
-                            </SignInButton>
-                            <SignUpButton mode="modal">
-                                <button className="bg-black text-white px-4 py-2 rounded-lg hover:bg-gray-800 transition">
-                                    Sign Up
-                                </button>
-                            </SignUpButton>
-                        </SignedOut>
-                    </div>
-
-                    <button onClick={() => setIsOpen(!isOpen)} className="md:hidden">
-                        {isOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
-                    </button>
+                <div className="hidden items-center gap-2 md:flex">
+                    <Link href="/#pricing" className={link}>Pricing</Link>
+                    <Link href="/#faq" className={link}>FAQ</Link>
+                    <SignedIn>
+                        <Link href="/dashboard" className={link}>My albums</Link>
+                        <UserButton afterSignOutUrl="/" />
+                    </SignedIn>
+                    <SignedOut>
+                        <SignInButton mode="modal"><button className={link}>Sign in</button></SignInButton>
+                        <Link href="/dashboard"><Button size="sm">Create an album</Button></Link>
+                    </SignedOut>
                 </div>
-            </div>
+
+                <button onClick={() => setIsOpen(!isOpen)} className="rounded-full p-2 md:hidden" aria-label="Toggle menu" aria-expanded={isOpen}>
+                    {isOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
+                </button>
+            </nav>
 
             {isOpen && (
-                <div className="md:hidden bg-white border-t">
-                    <div className="px-2 pt-2 pb-3 space-y-1">
+                <div className="border-t border-ink/10 bg-mist px-5 py-4 md:hidden" onClick={() => setIsOpen(false)}>
+                    <div className="flex flex-col items-start gap-2">
+                        <Link href="/" className={link}>Home</Link>
+                        <Link href="/#pricing" className={link}>Pricing</Link>
+                        <Link href="/#faq" className={link}>FAQ</Link>
                         <SignedIn>
-                            <Link href="/dashboard" className="block px-3 py-2 text-gray-600 hover:text-black">
-                                My Albums
-                            </Link>
-                            <UserButton afterSignOutUrl="/" />
+                            <Link href="/dashboard" className={link}>My albums</Link>
+                            <div className="px-3"><UserButton afterSignOutUrl="/" /></div>
                         </SignedIn>
                         <SignedOut>
-                            <SignInButton mode="modal">
-                                <button className="block w-full text-left px-3 py-2 text-gray-600 hover:text-black">
-                                    Sign In
-                                </button>
-                            </SignInButton>
-                            <SignUpButton mode="modal">
-                                <button className="block w-full text-left px-3 py-2 text-gray-600 hover:text-black">
-                                    Sign Up
-                                </button>
-                            </SignUpButton>
+                            <SignInButton mode="modal"><button className={link}>Sign in</button></SignInButton>
+                            <Link href="/dashboard"><Button size="sm">Create an album</Button></Link>
                         </SignedOut>
                     </div>
                 </div>
             )}
-        </nav>
+        </header>
     )
 }

@@ -1,261 +1,173 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { useParams } from "next/navigation"
-import { useUser } from "@clerk/nextjs" // Clerk authentication
-import { UploadImageCard } from "@/components/UploadImageCard"
-import { Trash2Icon, DownloadIcon, Share2Icon } from "lucide-react"
-import { useCallback } from "react";
+import { useUser, useAuth } from "@clerk/nextjs"
 import Image from "next/image"
+import Link from "next/link"
 import { toast } from "react-toastify"
+import { Trash2Icon, DownloadIcon, CopyIcon, ArrowLeftIcon } from "lucide-react"
+import { UploadImageCard } from "@/components/UploadImageCard"
+import { Modal } from "@/components/Modal"
+import { Button } from "@/components/Button"
+import { API, postPhoto, downloadImage, bearer } from "@/lib/utils"
 
 export default function AlbumPage() {
-    const params = useParams()
-    const { user } = useUser() // Fetch authenticated Clerk user
-    const [modal, setModal] = useState<{ show: boolean; message: string; action?: () => void }>({
-        show: false,
-        message: "",
-        action: undefined,
-    });
-    const [albumData, setAlbumData] = useState<{
-        album_name: string;
-        images: string[];
-        owner: string // Album owner's Clerk user ID
-    } | null>(null)
-    const [isUploading, setIsUploading] = useState(false)
+    const { id } = useParams<{ id: string }>()
+    const { user } = useUser()
+    const { getToken } = useAuth()
+    const [albumData, setAlbumData] = useState<{ album_name: string; images: string[]; owner: string } | null>(null)
+    const [status, setStatus] = useState<"loading" | "ready" | "missing">("loading")
+    const [uploading, setUploading] = useState(0) // photos still in flight
+    const [toDelete, setToDelete] = useState<string | null>(null)
 
-    // useEffect(() => {
-    //     fetchAlbumData()
-    // }, [params.id])
+    const isOwner = !!user?.id && albumData?.owner === user.id
+    const [origin, setOrigin] = useState("")
+    useEffect(() => setOrigin(window.location.origin), [])
+    const shareUrl = `${origin}/find/${id}`
+
+    const fetchAlbumData = useCallback(async () => {
+        try {
+            const response = await fetch(`${API}/albums/${id}`)
+            if (!response.ok) throw new Error("Album not found")
+            setAlbumData(await response.json())
+            setStatus("ready")
+        } catch {
+            setStatus("missing")
+        }
+    }, [id])
+
+    useEffect(() => { fetchAlbumData() }, [fetchAlbumData])
 
     const handleImageUpload = async (imageData: string) => {
-        setIsUploading(true)
+        setUploading((n) => n + 1)
         try {
-            const response = await fetch(imageData)
-            const blob = await response.blob()
-            const file = new File([blob], "image.jpg", { type: "image/jpeg" })
-
-            const formData = new FormData()
-            formData.append('file', file)
-
-            await fetch(`${process.env.NEXT_PUBLIC_API_URL}/albums/${params.id}/upload`, {
-                method: 'POST',
-                body: formData,
-            })
-
+            await postPhoto(`/albums/${id}/upload`, imageData, await getToken())
+            toast.success("Photo added")
             fetchAlbumData()
         } catch (error) {
-            console.error('Error uploading image:', error)
+            toast.error(error instanceof Error ? error.message : "Upload failed. Try again.")
         } finally {
-            setIsUploading(false)
+            setUploading((n) => n - 1)
         }
     }
-    const fetchAlbumData = useCallback(async () => {
-        if (!process.env.NEXT_PUBLIC_API_URL) return console.error("API URL not set");
 
+    const confirmDelete = async () => {
+        const image_name = toDelete
+        setToDelete(null)
         try {
-            const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/albums/${params.id}`)
-            if (!response.ok) throw new Error("Failed to fetch album data");
-
-            const data = await response.json()
-            setAlbumData(data)
-        } catch (error) {
-            console.error('Error fetching album:', error)
+            const response = await fetch(`${API}/delete_image`, {
+                method: "DELETE",
+                headers: { "Content-Type": "application/json", ...bearer(await getToken()) },
+                body: JSON.stringify({ image_name, album_id: id, user_id: user?.id }),
+            })
+            if (!response.ok) throw new Error()
+            toast.success("Photo deleted")
+            fetchAlbumData()
+        } catch {
+            toast.error("Couldn't delete the photo. Try again.")
         }
-    }, [params.id])
+    }
 
-    useEffect(() => {
-        fetchAlbumData();
-    }, [fetchAlbumData]);
-
-
-    const deleteImage = async (imageName: string) => {
-        if (!user?.id) {
-            setModal({ show: true, message: "You must be logged in to delete images." });
-            return;
+    const copyLink = async () => {
+        try {
+            await navigator.clipboard.writeText(shareUrl)
+            toast.success("Link copied")
+        } catch {
+            toast.error("Couldn't copy. Select the link and copy it manually.")
         }
+    }
 
-        if (albumData?.owner !== user.id) {
-            setModal({ show: true, message: "You are not authorized to delete this image." });
-            return;
-        }
-
-        setModal({
-            show: true,
-            message: "Are you sure you want to delete this image?",
-            action: async () => {
-                try {
-                    const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/delete_image`, {
-                        method: "DELETE",
-                        headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({ image_name: imageName, album_id: params.id }),
-                    });
-
-                    if (!response.ok) throw new Error("Failed to delete image");
-
-                    fetchAlbumData();
-                } catch (error) {
-                    console.error("Error deleting image:", error);
-                }
-                setModal({ show: false, message: "" });
-            },
-        });
-    };
-
-    // Modal Component
-    const Modal = () => {
-        if (!modal.show) return null;
-
+    if (status === "missing") {
         return (
-            <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50">
-                <div className="bg-white p-6 rounded-lg shadow-lg w-96">
-                    <p className="text-lg">{modal.message}</p>
-                    <div className="mt-4 flex justify-end">
-                        {modal.action ? (
-                            <>
-                                <button
-                                    onClick={() => setModal({ show: false, message: "" })}
-                                    className="mr-2 px-4 py-2 bg-gray-300 rounded"
-                                >
-                                    Cancel
-                                </button>
-                                <button
-                                    onClick={modal.action}
-                                    className="px-4 py-2 bg-red-600 text-white rounded"
-                                >
-                                    Confirm
-                                </button>
-                            </>
-                        ) : (
-                            <button
-                                onClick={() => setModal({ show: false, message: "" })}
-                                className="px-4 py-2 bg-blue-500 text-white rounded"
-                            >
-                                OK
-                            </button>
-                        )}
-                    </div>
-                </div>
-            </div>
-        );
-    };
-
-
-    // const deleteImage = async (imageName: string) => {
-    //     if (!user?.id) {
-    //         alert("You must be logged in to delete images.");
-    //         return;
-    //     }
-
-    //     if (albumData?.owner !== user.id) {
-    //         alert("You are not authorized to delete this image.");
-    //         return;
-    //     }
-
-    //     if (confirm('Are you sure you want to delete this image?')) {
-    //         try {
-    //             const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/delete_image`, {
-    //                 method: 'DELETE',
-    //                 headers: { 'Content-Type': 'application/json' },
-    //                 body: JSON.stringify({ image_name: imageName, album_id: params.id }),
-    //             });
-
-    //             if (!response.ok) throw new Error("Failed to delete image");
-
-    //             fetchAlbumData();
-    //         } catch (error) {
-    //             console.error('Error deleting image:', error);
-    //         }
-    //     }
-    // }
-
-    const downloadImage = (imageUrl: string) => {
-        const link = document.createElement("a");
-        link.href = imageUrl;
-        link.download = imageUrl.split("/").pop() || "downloaded-image.jpg";
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-    };
+            <main className="mx-auto max-w-6xl px-5 pt-32">
+                <h1 className="text-3xl font-bold">This album doesn&apos;t exist</h1>
+                <p className="mt-2 text-ink/70">It may have been deleted, or the link is wrong.</p>
+            </main>
+        )
+    }
 
     return (
-        <main className="min-h-screen mt-32">
-            <Modal />
+        <main className="mx-auto max-w-6xl px-5 pb-20 pt-28">
+            <Modal open={!!toDelete} onClose={() => setToDelete(null)} title="Delete this photo?">
+                <p className="text-ink/70">It will be removed from the album and from face search.</p>
+                <div className="mt-6 flex justify-end gap-2">
+                    <Button variant="outline" onClick={() => setToDelete(null)}>Cancel</Button>
+                    <Button variant="danger" onClick={confirmDelete}>Delete photo</Button>
+                </div>
+            </Modal>
 
-            <div className="container mx-auto p-4 space-y-8">
-                <h1 className="text-2xl font-bold">{albumData?.album_name || "Loading..."}</h1>
-                {albumData && (
-                    <div className="flex items-center gap-3">
-                        <button
-                            onClick={() => {
-                                const shareUrl = `${window.location.origin}/find/${params.id}`;
-                                navigator.clipboard.writeText(shareUrl);
-                                toast.success("Album link copied to clipboard!");
-                            }}
-                            className="flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white text-sm font-semibold px-4 py-2 rounded-md"
-                        >
-                            <Share2Icon className="w-4 h-4" />
-                            Share Album
-                        </button>
+            {isOwner && (
+                <Link href="/dashboard" className="mb-6 inline-flex items-center gap-1.5 text-sm font-semibold text-ink/60 hover:text-ink">
+                    <ArrowLeftIcon className="h-4 w-4" /> My albums
+                </Link>
+            )}
+            <h1 className="text-4xl font-extrabold sm:text-5xl">{albumData?.album_name ?? " "}</h1>
+            {albumData && (
+                <p className="mt-2 text-ink/60">
+                    {albumData.images.length} photo{albumData.images.length !== 1 && "s"}
+                </p>
+            )}
 
-                        <span className="text-sm text-gray-500">Link: /find/{params.id}</span>
+            {albumData && (
+                <div className="mt-8 rounded-3xl bg-white p-5 sm:p-6">
+                    <h2 className="text-lg font-bold">Guest link</h2>
+                    <p className="mt-1 text-sm text-ink/60">Guests open this link, take a selfie and get their photos.</p>
+                    <div className="mt-4 flex flex-col gap-2 sm:flex-row">
+                        <input
+                            readOnly
+                            value={shareUrl}
+                            aria-label="Guest link"
+                            onFocus={(e) => e.currentTarget.select()}
+                            className="min-w-0 flex-1 rounded-full bg-mist px-5 py-2.5 text-sm"
+                        />
+                        <Button onClick={copyLink}><CopyIcon className="h-4 w-4" />Copy link</Button>
                     </div>
-                )}
+                </div>
+            )}
 
-                {user?.id && albumData?.owner === user.id && (
-                    <UploadImageCard onImageUpload={handleImageUpload} />
-                )}
+            {isOwner && (
+                <div className="mt-6">
+                    <UploadImageCard multiple onImageUpload={handleImageUpload} />
+                    {uploading > 0 && (
+                        <p role="status" className="mt-3 text-sm font-semibold text-booth">
+                            Uploading {uploading} photo{uploading > 1 && "s"}…
+                        </p>
+                    )}
+                </div>
+            )}
 
-                {isUploading && (
-                    <div className="text-center py-4 text-gray-500">
-                        Uploading image...
-                    </div>
-                )}
-
-                {albumData?.images?.length ? (
-                    <div className="space-y-4">
-                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                            {albumData.images.map((img) => {
-                                const imageUrl = `${process.env.NEXT_PUBLIC_API_URL}/images/${img}`;
-                                return (
-                                    <div key={img} className="relative group">
-                                        <Image
-                                            src={imageUrl}
-                                            alt="Album image"
-                                            width={300}
-                                            height={300}
-                                            className="rounded-lg object-cover w-full h-[200px]"
-                                        />
-
-                                        {/* If user is the album creator, show delete button */}
-                                        {user?.id && albumData?.owner === user.id ? (
-                                            <button
-                                                onClick={() => deleteImage(img)}
-                                                className="absolute top-2 right-2 bg-red-500 p-2 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
-                                            >
-                                                <Trash2Icon className="w-4 h-4 text-white" />
-
-                                            </button>
-                                        ) : (
-                                            /* If not the creator, show download button */
-                                            <button
-                                                onClick={() => downloadImage(imageUrl)}
-                                                className="absolute top-2 right-2 bg-blue-500 p-2 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
-                                            >
-                                                <DownloadIcon className="w-4 h-4 text-white" />
-                                            </button>
-                                        )}
-                                    </div>
-                                );
-                            })}
-                        </div>
-                    </div>
-                ) : (
-                    <div className="text-center py-8 text-gray-500">
-                        No images in this album yet
-                    </div>
-                )}
-            </div>
+            {albumData?.images.length ? (
+                <div className="mt-10 grid grid-cols-2 gap-3 md:grid-cols-4">
+                    {albumData.images.map((img) => {
+                        const imageUrl = `${API}/images/${img}`
+                        return (
+                            <div key={img} className="group relative aspect-square overflow-hidden rounded-xl bg-white">
+                                <Image
+                                    src={imageUrl}
+                                    alt="Album photo"
+                                    fill
+                                    sizes="(max-width: 768px) 50vw, 25vw"
+                                    className="object-cover transition-transform duration-500 group-hover:scale-105"
+                                />
+                                <button
+                                    aria-label={isOwner ? "Delete photo" : "Download photo"}
+                                    onClick={() => isOwner
+                                        ? setToDelete(img)
+                                        : downloadImage(imageUrl).catch(() => toast.error("Download failed. Try again."))}
+                                    className={`absolute right-2 top-2 rounded-full p-2.5 shadow transition-opacity md:opacity-0 md:group-hover:opacity-100 focus:opacity-100 ${isOwner ? "bg-alert text-white" : "bg-white text-ink"}`}
+                                >
+                                    {isOwner ? <Trash2Icon className="h-4 w-4" /> : <DownloadIcon className="h-4 w-4" />}
+                                </button>
+                            </div>
+                        )
+                    })}
+                </div>
+            ) : status === "ready" && (
+                <p className="mt-12 max-w-sm text-ink/70">
+                    {isOwner ? "No photos yet. Add the event's photos above and guests can start finding themselves." : "The host hasn't added photos yet."}
+                </p>
+            )}
         </main>
-    );
+    )
 }
